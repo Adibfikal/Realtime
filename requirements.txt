@@ -1,0 +1,23 @@
+# Intel RealSense D435i Live Viewer Dependencies
+# Compatible with Python 3.7+ on Windows 64-bit
+
+# GUI Framework - PyQt5 with Python 3.7 compatibility
+PyQt5>=5.15.0,<=5.15.7
+
+# Intel RealSense SDK - Latest available version
+# pyrealsense2>=2.54.0
+
+# Computer Vision and Image Processing
+opencv-python>=4.5.0,<5.0.0
+
+# Scientific Computing
+numpy>=1.19.0,<1.22.0
+
+# Image Processing Library
+Pillow>=8.0.0,<10.0.0
+
+# Object Detection and Tracking Dependencies
+ultralytics>=8.0.0
+supervision>=0.16.0
+torch>=1.9.0
+torchvision>=0.10.0 
