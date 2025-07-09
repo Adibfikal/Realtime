@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
         # UI state
         self.is_camera_connected = False
         self.recording_active = False
-        self.detection_enabled = False
+        self.detection_enabled = True
         self.frame_count = 0
         self.fps_counter = 0
         self.last_fps_time = time.time()

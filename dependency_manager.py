@@ -50,7 +50,7 @@ class DependencyManager:
     
     DETECTION_PACKAGES = [
         "ultralytics>=8.0.0",
-        "supervision>=0.16.0", 
+        "supervision>=0.16.0",
         "torch>=1.9.0",
         "torchvision>=0.10.0"
     ]

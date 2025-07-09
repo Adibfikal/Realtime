@@ -68,8 +68,58 @@ class ObjectDetectionProcessor:
             return False, f"Model file not found: {self.model_path}"
         
         try:
-            # Load YOLO model
-            self.model = YOLO(self.model_path)
+            # Load YOLO model with proper handling for PyTorch 2.6+ weights_only behavior
+            import torch
+            
+            # Check ultralytics version and handle compatibility
+            try:
+                import ultralytics
+                from ultralytics.nn.modules import block
+                
+                print(f"Ultralytics version: {ultralytics.__version__}")
+                
+                # Check if required modules exist for the model
+                missing_modules = []
+                if not hasattr(block, 'C3k2'):
+                    missing_modules.append('C3k2')
+                
+                if missing_modules:
+                    print(f"⚠ Missing modules in current ultralytics version: {missing_modules}")
+                    print("This model requires a newer version of ultralytics")
+                    print("Please run: pip install ultralytics>=8.2.0")
+                    
+                    # Try compatibility workarounds
+                    for module_name in missing_modules:
+                        if module_name == 'C3k2':
+                            if hasattr(block, 'C2f'):
+                                setattr(block, 'C3k2', getattr(block, 'C2f'))
+                                print(f"✓ Added {module_name} compatibility using C2f")
+                            elif hasattr(block, 'C3'):
+                                setattr(block, 'C3k2', getattr(block, 'C3'))
+                                print(f"✓ Added {module_name} compatibility using C3")
+                            else:
+                                print(f"❌ Cannot create compatibility for {module_name}")
+                                
+            except Exception as compat_error:
+                print(f"⚠ Version compatibility check failed: {compat_error}")
+            
+            # Temporarily set torch.load to use weights_only=False for trusted model loading
+            # This is necessary for custom trained YOLO models with PyTorch 2.6+
+            original_load = torch.load
+            def safe_load_for_yolo(*args, **kwargs):
+                # Force weights_only=False for model loading (trusted source)
+                kwargs['weights_only'] = False
+                return original_load(*args, **kwargs)
+            
+            # Patch torch.load temporarily
+            torch.load = safe_load_for_yolo
+            
+            try:
+                self.model = YOLO(self.model_path)
+                print("✓ YOLO model loaded successfully")
+            finally:
+                # Always restore original torch.load
+                torch.load = original_load
             
             # Performance optimizations
             self.model.overrides['imgsz'] = self.YOLO_INPUT_SIZE
@@ -94,7 +144,7 @@ class ObjectDetectionProcessor:
                 text_scale=self.LABEL_FONT_SCALE,
                 text_thickness=self.LABEL_FONT_THICKNESS,
                 text_padding=self.LABEL_PADDING,
-                text_color=sv.Color.WHITE
+                text_color=sv.Color.white()
             )
             
             self.detection_stats['model_loaded'] = True
