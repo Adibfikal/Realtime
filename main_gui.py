@@ -3,7 +3,7 @@ import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QLabel, QPushButton, QGridLayout, 
                             QGroupBox, QTextEdit, QProgressBar, QFileDialog,
-                            QMessageBox, QFrame, QSizePolicy)
+                            QMessageBox, QFrame, QSizePolicy, QComboBox, QCheckBox)
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, Qt
 from PyQt5.QtGui import QPixmap, QImage, QFont, QPalette, QColor
 import cv2
@@ -98,6 +98,7 @@ class MainWindow(QMainWindow):
         self.is_camera_connected = False
         self.recording_active = False
         self.detection_enabled = True
+        self.communication_enabled = False
         self.frame_count = 0
         self.fps_counter = 0
         self.last_fps_time = time.time()
@@ -272,6 +273,31 @@ class MainWindow(QMainWindow):
         recording_layout.addWidget(self.save_path_label)
         
         layout.addWidget(recording_group)
+        
+        # Communication controls
+        communication_group = QGroupBox("ROS Communication")
+        communication_layout = QVBoxLayout(communication_group)
+        
+        # Communication protocol selector
+        protocol_layout = QHBoxLayout()
+        protocol_layout.addWidget(QLabel("Protocol:"))
+        self.protocol_combo = QComboBox()
+        self.protocol_combo.addItems(["socket", "ros", "ros_noetic", "file"])
+        self.protocol_combo.setCurrentText("ros_noetic")
+        protocol_layout.addWidget(self.protocol_combo)
+        communication_layout.addLayout(protocol_layout)
+        
+        # Enable communication checkbox
+        self.enable_communication_checkbox = QCheckBox("Enable Communication")
+        self.enable_communication_checkbox.stateChanged.connect(self.toggle_communication)
+        communication_layout.addWidget(self.enable_communication_checkbox)
+        
+        # Communication status
+        self.communication_status_label = QLabel("Status: Disabled")
+        self.communication_status_label.setStyleSheet("font-size: 10px; color: #666666;")
+        communication_layout.addWidget(self.communication_status_label)
+        
+        layout.addWidget(communication_group)
         
         # Camera info
         info_group = QGroupBox("Camera Information")
@@ -478,6 +504,59 @@ Format: {stream_config['depth_format']}
         if folder:
             self.save_path_label.setText(f"Save to: {folder}/")
     
+    def toggle_communication(self):
+        """Toggle ROS communication"""
+        if self.enable_communication_checkbox.isChecked():
+            if not self.detection_enabled:
+                self.log_message("⚠ Communication requires object detection to be enabled")
+                self.enable_communication_checkbox.setChecked(False)
+                return
+            
+            # Setup communication
+            protocol = self.protocol_combo.currentText()
+            self.log_message(f"Setting up {protocol} communication...")
+            
+            # Configure communication parameters based on protocol
+            kwargs = {}
+            if protocol == "ros_noetic":
+                kwargs = {
+                    'node_name': 'realtime_object_detector',
+                    'objects_topic': '/detected_objects',
+                    'markers_topic': '/detection_markers',
+                    'pointcloud_topic': '/detection_pointcloud',
+                    'tf_frame': 'camera_link',
+                    'world_frame': 'map'
+                }
+            elif protocol == "socket":
+                kwargs = {
+                    'host': 'localhost',
+                    'port': 8888
+                }
+            elif protocol == "file":
+                kwargs = {
+                    'output_file': 'detection_data.json'
+                }
+            
+            success, message = self.camera_controller.setup_communication(protocol, **kwargs)
+            if success:
+                self.camera_controller.enable_communication(True)
+                self.communication_enabled = True
+                self.communication_status_label.setText(f"Status: Active ({protocol})")
+                self.communication_status_label.setStyleSheet("font-size: 10px; color: #00aa00;")
+                self.log_message(f"✓ Communication enabled: {message}")
+            else:
+                self.enable_communication_checkbox.setChecked(False)
+                self.communication_status_label.setText(f"Status: Failed - {message}")
+                self.communication_status_label.setStyleSheet("font-size: 10px; color: #aa0000;")
+                self.log_message(f"❌ Communication setup failed: {message}")
+        else:
+            # Disable communication
+            self.camera_controller.enable_communication(False)
+            self.communication_enabled = False
+            self.communication_status_label.setText("Status: Disabled")
+            self.communication_status_label.setStyleSheet("font-size: 10px; color: #666666;")
+            self.log_message("Communication disabled")
+    
     def update_ui(self):
         """Update UI with latest frames and status"""
         if not self.camera_controller.is_streaming:
@@ -516,7 +595,15 @@ Format: {stream_config['depth_format']}
                     detection_status = "Enabled"
                     objects_count = stats.get('last_detection_count', 0)
                     processing_time = stats.get('avg_processing_time', 0)
-                    self.detection_stats_label.setText(f"Detection: {detection_status} | Objects: {objects_count} | Processing: {processing_time:.1f}ms")
+                    
+                    # Add communication status
+                    comm_status = ""
+                    if self.communication_enabled and self.camera_controller.is_communication_enabled():
+                        comm_stats = self.camera_controller.get_communication_stats()
+                        messages_sent = comm_stats.get('messages_sent', 0)
+                        comm_status = f" | ROS: {messages_sent} msgs"
+                    
+                    self.detection_stats_label.setText(f"Detection: {detection_status} | Objects: {objects_count} | Processing: {processing_time:.1f}ms{comm_status}")
                     self.detection_stats_label.setStyleSheet("background-color: #2a4a2a; color: white; padding: 5px;")  # Green background
                 else:
                     self.detection_stats_label.setText("Detection: Disabled | Objects: 0 | Processing: 0ms")

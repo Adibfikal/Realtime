@@ -7,6 +7,7 @@ from queue import Queue, Empty
 from typing import Optional, Tuple, Callable
 from config_loader import ConfigLoader
 from object_detection_processor import ObjectDetectionProcessor
+from communication_handler import create_communication_handler
 
 class CameraController:
     """Manages Intel RealSense D435i camera operations"""
@@ -37,6 +38,10 @@ class CameraController:
         self.detection_enabled = False
         self.detection_writer = None  # For recording annotated frames
         
+        # Communication handler for sending detection data
+        self.communication_handler = None
+        self.communication_enabled = False
+        
         # Stream configuration
         self.stream_config = config_loader.get_stream_config()
         self.camera_params = config_loader.get_camera_parameters()
@@ -61,6 +66,29 @@ class CameraController:
     def get_detection_stats(self) -> dict:
         """Get current detection statistics"""
         return self.detection_processor.get_statistics()
+    
+    def setup_communication(self, protocol: str = "ros_noetic", **kwargs) -> Tuple[bool, str]:
+        """Setup communication handler for sending detection data"""
+        try:
+            self.communication_handler = create_communication_handler(protocol, **kwargs)
+            self.communication_enabled = True
+            return True, f"Communication handler initialized with {protocol}"
+        except Exception as e:
+            return False, f"Failed to initialize communication: {e}"
+    
+    def enable_communication(self, enabled: bool = True):
+        """Enable or disable communication"""
+        self.communication_enabled = enabled and self.communication_handler is not None
+    
+    def is_communication_enabled(self) -> bool:
+        """Check if communication is enabled"""
+        return self.communication_enabled and self.communication_handler is not None
+    
+    def get_communication_stats(self) -> dict:
+        """Get communication statistics"""
+        if self.communication_handler:
+            return self.communication_handler.get_statistics()
+        return {"enabled": False}
     
     def connect(self) -> bool:
         """Connect to RealSense camera and start streaming"""
@@ -244,6 +272,15 @@ class CameraController:
                     if self.detection_enabled and detection_metadata:
                         self.detection_processor.add_detection_metadata(detection_metadata)
                 
+                # Send detection data via communication handler
+                if self.communication_enabled and self.detection_enabled and detection_metadata:
+                    try:
+                        # Convert detection metadata to communication format
+                        detection_results = self._convert_detection_to_communication_format(detection_metadata)
+                        self.communication_handler.send_detection_data(detection_results)
+                    except Exception as e:
+                        print(f"⚠ Communication error: {e}")
+                
                 # Call callbacks if available
                 if self.rgb_callback:
                     self.rgb_callback(color_image)
@@ -339,6 +376,30 @@ class CameraController:
         except Exception as e:
             print(f"⚠ Recording error: {e}")
     
+    def _convert_detection_to_communication_format(self, detection_metadata: dict) -> list:
+        """Convert detection metadata to communication format"""
+        if not detection_metadata or 'detections' not in detection_metadata:
+            return []
+        
+        communication_results = []
+        
+        for detection in detection_metadata['detections']:
+            result = {
+                'tracker_id': detection.get('tracker_id', 0),
+                'class_name': detection.get('class_name', 'unknown'),
+                'confidence': detection.get('confidence', 0.0),
+                'bbox': detection.get('bbox', [0, 0, 0, 0]),
+                'depth_mm': detection.get('depth_mm', 0.0),
+                'depth_m': detection.get('depth_m', 0.0),
+                'image_width': self.stream_config['width'],
+                'image_height': self.stream_config['height'],
+                'processing_time_ms': detection_metadata.get('processing_time_ms', 0.0),
+                'detection_fps': detection_metadata.get('detection_fps', 0.0)
+            }
+            communication_results.append(result)
+        
+        return communication_results
+    
     def disconnect(self):
         """Disconnect from camera and cleanup"""
         self.stop_streaming()
@@ -352,6 +413,15 @@ class CameraController:
         
         self.config = None
         self.align = None
+        
+        # Shutdown communication handler
+        if self.communication_handler:
+            try:
+                self.communication_handler.shutdown()
+                self.communication_handler = None
+                self.communication_enabled = False
+            except Exception as e:
+                print(f"⚠ Communication shutdown error: {e}")
         
         print("✓ Camera disconnected")
     

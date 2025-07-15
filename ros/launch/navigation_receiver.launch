@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- ROS1 Noetic Launch File for Navigation Receiver Only -->
+    
+    <!-- Arguments -->
+    <arg name="camera_frame" default="camera_link" />
+    <arg name="world_frame" default="map" />
+    <arg name="objects_topic" default="/detected_objects" />
+    <arg name="markers_topic" default="/detection_markers" />
+    <arg name="pointcloud_topic" default="/detection_pointcloud" />
+    <arg name="landmarks_topic" default="/navigation_landmarks" />
+    <arg name="obstacles_topic" default="/navigation_obstacles" />
+    <arg name="use_rviz" default="true" />
+    <arg name="use_custom_msgs" default="true" />
+    
+    <!-- ROS1 Noetic Navigation Receiver -->
+    <node name="navigation_receiver" pkg="realtime_detection" type="scripts/ros_noetic_receiver.py" output="screen">
+        <param name="objects_topic" value="$(arg objects_topic)" />
+        <param name="markers_topic" value="$(arg markers_topic)" />
+        <param name="pointcloud_topic" value="$(arg pointcloud_topic)" />
+        <param name="landmarks_topic" value="$(arg landmarks_topic)" />
+        <param name="obstacles_topic" value="$(arg obstacles_topic)" />
+        <param name="tf_frame" value="$(arg camera_frame)" />
+        <param name="world_frame" value="$(arg world_frame)" />
+        <param name="use_custom_msgs" value="$(arg use_custom_msgs)" />
+    </node>
+    
+    <!-- RViz visualization -->
+    <node if="$(arg use_rviz)" name="rviz" pkg="rviz" type="rviz" 
+          args="-d $(find realtime_detection)/config/detection_visualization.rviz" />
+    
+    <!-- Static transform publisher for camera frame -->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="camera_static_transform"
+          args="0 0 0 0 0 0 $(arg world_frame) $(arg camera_frame)" />
+    
+    <!-- Optional: Record bag for debugging -->
+    <node name="rosbag_record" pkg="rosbag" type="record" 
+          args="-o /tmp/navigation_data $(arg landmarks_topic) $(arg obstacles_topic) /tf /tf_static /navigation_occupancy_grid"
+          if="false" />
+    
+</launch> 

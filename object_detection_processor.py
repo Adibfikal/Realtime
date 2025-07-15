@@ -190,7 +190,7 @@ class ObjectDetectionProcessor:
             np.abs(valid_depth - mean_depth) <= self.DEPTH_OUTLIER_THRESHOLD * std_depth
         ]
         
-        return np.mean(filtered_depth) if len(filtered_depth) > 0 else mean_depth
+        return float(np.mean(filtered_depth)) if len(filtered_depth) > 0 else float(mean_depth)
     
     def process_frame(self, rgb_frame: np.ndarray, depth_frame: np.ndarray) -> Tuple[np.ndarray, Dict]:
         """
@@ -222,9 +222,9 @@ class ObjectDetectionProcessor:
                     
                     # Store detection info for metadata
                     if hasattr(detections, 'class_id') and hasattr(detections, 'tracker_id'):
-                        class_id = detections.class_id[i] if i < len(detections.class_id) else None
-                        tracker_id = detections.tracker_id[i] if i < len(detections.tracker_id) else None
-                        confidence = detections.confidence[i] if hasattr(detections, 'confidence') and i < len(detections.confidence) else None
+                        class_id = detections.class_id[i] if detections.class_id is not None and i < len(detections.class_id) else None
+                        tracker_id = detections.tracker_id[i] if detections.tracker_id is not None and i < len(detections.tracker_id) else None
+                        confidence = detections.confidence[i] if hasattr(detections, 'confidence') and detections.confidence is not None and i < len(detections.confidence) else None
                         class_name = results.names[class_id] if class_id is not None and hasattr(results, 'names') else "unknown"
                         
                         detection_info.append({
@@ -239,7 +239,8 @@ class ObjectDetectionProcessor:
             
             # Create labels for annotation
             labels = []
-            if hasattr(detections, 'class_id') and hasattr(detections, 'tracker_id'):
+            if (hasattr(detections, 'class_id') and hasattr(detections, 'tracker_id') and 
+                detections.class_id is not None and detections.tracker_id is not None):
                 for i, (class_id, tracker_id) in enumerate(zip(detections.class_id, detections.tracker_id)):
                     class_name = results.names[class_id] if class_id is not None and hasattr(results, 'names') else "unknown"
                     

@@ -69,7 +69,24 @@ Realtime/
 ├── config.json          # Camera configuration settings
 ├── requirements.txt     # Python dependencies
 ├── README.md           # This file
-└── recordings/         # Default recording output directory
+├── recordings/         # Default recording output directory
+├── ros/                # ROS integration package
+│   ├── scripts/        # ROS Python scripts
+│   │   ├── ros_noetic_communication.py
+│   │   ├── ros_noetic_receiver.py
+│   │   └── navigation_receiver.py
+│   ├── msgs/           # ROS message definitions
+│   │   ├── DetectedObject.msg
+│   │   ├── DetectedObjects.msg
+│   │   ├── CMakeLists.txt
+│   │   └── package.xml
+│   ├── launch/         # ROS launch files
+│   │   ├── realtime_detection.launch
+│   │   ├── navigation_receiver.launch
+│   │   └── detection_sender.launch
+│   └── config/         # ROS configuration files
+│       └── detection_visualization.rviz
+└── slam_integration.py # SLAM integration module
 ```
 
 ## 🎮 Usage

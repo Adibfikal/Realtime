@@ -20,4 +20,30 @@ Pillow>=8.0.0,<10.0.0
 ultralytics>=8.2.0
 supervision>=0.16.0
 torch>=1.9.0
-torchvision>=0.10.0 
+torchvision>=0.10.0
+
+# ROS1 Noetic Dependencies
+# Note: These require ROS1 Noetic to be installed on the system
+# Install instructions: http://wiki.ros.org/noetic/Installation
+rospy
+std_msgs
+sensor_msgs
+geometry_msgs
+visualization_msgs
+tf2_ros
+tf2_geometry_msgs
+tf2_msgs
+nav_msgs
+actionlib_msgs
+rosbag
+roslaunch
+rosnode
+rostopic
+rosmsg
+rosparam
+
+# Additional Python dependencies for ROS integration
+defusedxml
+PyYAML>=3.13
+rospkg
+catkin_pkg 
