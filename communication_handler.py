@@ -43,7 +43,7 @@ class CommunicationProtocol(Enum):
 
 @dataclass
 class DetectedObject:
-    """Standardized object detection data structure for SLAM"""
+    """Enhanced standardized object detection data structure for SLAM with center point cloud and angles"""
     # Object identification
     object_id: int
     class_name: str
@@ -54,18 +54,48 @@ class DetectedObject:
     bbox_2d: List[float]  # [x1, y1, x2, y2]
     image_center: List[float]  # [x, y] center of bbox in image
     
-    # 3D information (camera coordinates)
-    position_3d: List[float]  # [x, y, z] in meters from camera
+    # Enhanced 3D information (camera coordinates)
+    position_3d: List[float]  # [x, y, z] in meters from camera (original)
+    center_point_3d: List[float]  # [x, y, z] weighted center point in meters
+    center_point_image: List[float]  # [x, y] weighted center in image coordinates
     depth_mm: float
+    
+    # Spherical coordinate angles
+    azimuth_deg: float = 0.0  # Azimuth angle in degrees
+    elevation_deg: float = 0.0  # Elevation angle in degrees
+    
+    # Quality metrics
+    point_confidence: float = 0.0  # Confidence of center point calculation
+    depth_quality: float = 0.0  # Quality of depth measurement
+    depth_statistics: Optional[List[float]] = None  # [mean, std, min, max] depth stats
     
     # Camera parameters
     camera_frame: str = "camera_link"
     image_width: int = 640
     image_height: int = 480
     
+    # Camera intrinsics
+    focal_length_x: float = 525.0
+    focal_length_y: float = 525.0
+    principal_point_x: float = 320.0
+    principal_point_y: float = 320.0
+    
     # Additional SLAM-relevant data
     is_static: bool = True  # Assume objects are static landmarks
     reliability_score: float = 1.0  # How reliable this detection is
+    
+    # Processing metadata
+    processing_time_ms: float = 0.0
+    processing_version: str = "v2.0_enhanced"
+    
+    def __post_init__(self):
+        """Initialize default values for lists"""
+        if self.depth_statistics is None:
+            self.depth_statistics = [0.0, 0.0, 0.0, 0.0]
+        if self.center_point_3d is None:
+            self.center_point_3d = self.position_3d.copy() if self.position_3d else [0.0, 0.0, 0.0]
+        if self.center_point_image is None:
+            self.center_point_image = self.image_center.copy() if self.image_center else [0.0, 0.0]
     
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization"""
@@ -406,16 +436,31 @@ class CommunicationHandler:
                 
     def send_detection_data(self, detection_results: List[Dict]) -> bool:
         """
-        Send detection data to navigation system
-        detection_results: List of detection dictionaries from object_detection_processor
+        Send enhanced detection data to navigation system
+        detection_results: List of enhanced detection dictionaries from enhanced_object_detection_processor
         """
         if not self.is_running or not self.communication:
             return False
         
         try:
-            # Convert detection results to DetectedObject format
+            # Convert detection results to enhanced DetectedObject format
             detected_objects = []
             for result in detection_results:
+                # Extract enhanced fields with fallbacks
+                center_point_3d = result.get('center_point_3d', [0.0, 0.0, 0.0])
+                center_point_image = result.get('center_point_image', [0, 0])
+                position_3d = result.get('position_3d', center_point_3d)
+                
+                # Handle legacy detection data that might not have enhanced fields
+                if not center_point_3d or center_point_3d == [0.0, 0.0, 0.0]:
+                    center_point_3d = self._calculate_3d_position(result)
+                
+                if not center_point_image or center_point_image == [0, 0]:
+                    center_point_image = self._calculate_bbox_center(result.get('bbox', [0, 0, 0, 0]))
+                
+                # Get camera intrinsics
+                camera_intrinsics = result.get('camera_intrinsics', {})
+                
                 obj = DetectedObject(
                     object_id=result.get('tracker_id', 0),
                     class_name=result.get('class_name', 'unknown'),
@@ -423,8 +468,20 @@ class CommunicationHandler:
                     timestamp=time.time(),
                     bbox_2d=result.get('bbox', [0, 0, 0, 0]),
                     image_center=self._calculate_bbox_center(result.get('bbox', [0, 0, 0, 0])),
-                    position_3d=self._calculate_3d_position(result),
-                    depth_mm=result.get('depth_mm', 0.0)
+                    position_3d=position_3d,
+                    center_point_3d=center_point_3d,
+                    center_point_image=center_point_image,
+                    depth_mm=result.get('depth_mm', 0.0),
+                    azimuth_deg=result.get('azimuth_deg', 0.0),
+                    elevation_deg=result.get('elevation_deg', 0.0),
+                    point_confidence=result.get('point_confidence', 0.0),
+                    depth_quality=result.get('depth_quality', 0.0),
+                    depth_statistics=result.get('depth_statistics', {}).get('mean', [0.0, 0.0, 0.0, 0.0]) if isinstance(result.get('depth_statistics'), dict) else [0.0, 0.0, 0.0, 0.0],
+                    focal_length_x=camera_intrinsics.get('fx', 525.0),
+                    focal_length_y=camera_intrinsics.get('fy', 525.0),
+                    principal_point_x=camera_intrinsics.get('cx', 320.0),
+                    principal_point_y=camera_intrinsics.get('cy', 240.0),
+                    processing_time_ms=result.get('processing_time_ms', 0.0)
                 )
                 detected_objects.append(obj)
             
@@ -433,7 +490,7 @@ class CommunicationHandler:
             return True
             
         except Exception as e:
-            print(f"Failed to queue detection data: {e}")
+            print(f"Failed to queue enhanced detection data: {e}")
             return False
     
     def _calculate_bbox_center(self, bbox: List[float]) -> List[float]:

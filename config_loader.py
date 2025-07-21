@@ -110,4 +110,131 @@ class ConfigLoader:
         print(f"  Firmware: {device_info.get('fw version', 'Unknown')}")
         print(f"  Resolution: {stream_config['width']}x{stream_config['height']}")
         print(f"  FPS: {stream_config['fps']}")
-        print(f"  Depth Format: {stream_config['depth_format']}") 
+    def get_enhanced_detection_config(self) -> Dict[str, Any]:
+        """Get enhanced detection configuration settings"""
+        enhanced_config = self.config.get("enhanced_detection", {})
+        
+        # Default configuration
+        default_config = {
+            "point_cloud_processing": {
+                "weighting_method": "combined",
+                "distance_weight": 0.3,
+                "validity_weight": 0.3,
+                "statistical_weight": 0.2,
+                "spatial_weight": 0.2,
+                "min_valid_points": 10,
+                "max_processing_region": 0.8,
+                "outlier_threshold": 2.0,
+                "neighborhood_window_size": 3
+            },
+            "angle_calculation": {
+                "coordinate_system": "camera_centered",
+                "angle_units": "degrees",
+                "precision": 1,
+                "enable_azimuth": True,
+                "enable_elevation": True
+            },
+            "visualization": {
+                "show_coordinates": True,
+                "show_angles": True,
+                "label_format": "detailed",
+                "coordinate_precision": 2,
+                "angle_precision": 1,
+                "compact_display": False,
+                "enable_quality_indicators": True
+            },
+            "camera_intrinsics": {
+                "auto_detect": True,
+                "fallback_fx": 525.0,
+                "fallback_fy": 525.0,
+                "fallback_cx": 320.0,
+                "fallback_cy": 240.0,
+                "update_frequency_frames": 30
+            },
+            "performance": {
+                "enable_gpu_acceleration": True,
+                "enable_half_precision": True,
+                "max_processing_time_ms": 50,
+                "enable_profiling": False
+            },
+            "quality_control": {
+                "min_point_confidence": 0.3,
+                "min_depth_quality": 0.2,
+                "enable_outlier_filtering": True,
+                "enable_consistency_check": True
+            }
+        }
+        
+        # Merge with loaded configuration
+        for category, settings in default_config.items():
+            if category in enhanced_config:
+                settings.update(enhanced_config[category])
+            enhanced_config[category] = settings
+        
+        return enhanced_config
+    
+    def get_point_cloud_config(self) -> Dict[str, Any]:
+        """Get point cloud processing configuration"""
+        enhanced_config = self.get_enhanced_detection_config()
+        return enhanced_config.get("point_cloud_processing", {})
+
+    def get_angle_calculation_config(self) -> Dict[str, Any]:
+        """Get angle calculation configuration"""
+        enhanced_config = self.get_enhanced_detection_config()
+        return enhanced_config.get("angle_calculation", {})
+
+    def get_visualization_config(self) -> Dict[str, Any]:
+        """Get visualization configuration"""
+        enhanced_config = self.get_enhanced_detection_config()
+        return enhanced_config.get("visualization", {})
+
+    def get_camera_intrinsics_config(self) -> Dict[str, Any]:
+        """Get camera intrinsics configuration"""
+        enhanced_config = self.get_enhanced_detection_config()
+        return enhanced_config.get("camera_intrinsics", {})
+
+    def get_performance_config(self) -> Dict[str, Any]:
+        """Get performance configuration"""
+        enhanced_config = self.get_enhanced_detection_config()
+        return enhanced_config.get("performance", {})
+
+    def get_quality_control_config(self) -> Dict[str, Any]:
+        """Get quality control configuration"""
+        enhanced_config = self.get_enhanced_detection_config()
+        return enhanced_config.get("quality_control", {})
+
+    def update_enhanced_config(self, category: str, updates: Dict[str, Any]) -> bool:
+        """Update enhanced detection configuration"""
+        try:
+            if "enhanced_detection" not in self.config:
+                self.config["enhanced_detection"] = {}
+            
+            if category not in self.config["enhanced_detection"]:
+                self.config["enhanced_detection"][category] = {}
+            
+            self.config["enhanced_detection"][category].update(updates)
+            
+            print(f"✓ Enhanced detection config updated for {category}")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating enhanced config: {e}")
+            return False
+
+    def is_enhanced_detection_enabled(self) -> bool:
+        """Check if enhanced detection features are enabled"""
+        return "enhanced_detection" in self.config
+
+    def save_config(self, output_file: Optional[str] = None) -> bool:
+        """Save current configuration to file"""
+        try:
+            output_path = output_file or self.config_path
+            with open(output_path, 'w') as f:
+                json.dump(self.config, f, indent=4)
+            
+            print(f"✓ Configuration saved to {output_path}")
+            return True
+            
+        except Exception as e:
+            print(f"Error saving config: {e}")
+            return False

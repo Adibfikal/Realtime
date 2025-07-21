@@ -1,0 +1,95 @@
+{
+  "timestamp": "2025-07-21 16:42:49",
+  "test_type": "standalone_enhanced_detection",
+  "summary": {
+    "total_tests": 8,
+    "passed_tests": 7,
+    "total_time": 19.92112159729004,
+    "success_rate": 87.5
+  },
+  "detailed_results": [
+    {
+      "test_name": "Configuration System",
+      "passed": true,
+      "execution_time": 4.1961669921875e-05,
+      "details": {
+        "sections": 6,
+        "config_size": 6
+      },
+      "error": ""
+    },
+    {
+      "test_name": "Enhanced Processor Creation",
+      "passed": true,
+      "execution_time": 3.170967102050781e-05,
+      "details": {
+        "attributes_count": 4,
+        "methods_count": 4,
+        "enhanced_features": true
+      },
+      "error": ""
+    },
+    {
+      "test_name": "Weighted Center Point Extraction",
+      "passed": true,
+      "execution_time": 0.8656034469604492,
+      "details": {
+        "methods_tested": 5,
+        "valid_results": 5
+      },
+      "error": ""
+    },
+    {
+      "test_name": "Camera Intrinsics Integration",
+      "passed": true,
+      "execution_time": 0.00011610984802246094,
+      "details": {
+        "intrinsics": {
+          "fx": 525.0,
+          "fy": 525.0,
+          "cx": 320.0,
+          "cy": 240.0,
+          "width": 640,
+          "height": 480
+        }
+      },
+      "error": ""
+    },
+    {
+      "test_name": "3D Coordinate Conversion",
+      "passed": true,
+      "execution_time": 7.200241088867188e-05,
+      "details": {
+        "test_cases": 4,
+        "valid_conversions": 4
+      },
+      "error": ""
+    },
+    {
+      "test_name": "Spherical Angle Calculations",
+      "passed": true,
+      "execution_time": 7.677078247070312e-05,
+      "details": {
+        "test_cases": 5,
+        "valid_calculations": 5
+      },
+      "error": ""
+    },
+    {
+      "test_name": "Performance Impact",
+      "passed": false,
+      "execution_time": 17.99257183074951,
+      "details": {},
+      "error": "center_point_extraction too slow: 1798.560ms > 50.0ms"
+    },
+    {
+      "test_name": "System Integration",
+      "passed": true,
+      "execution_time": 1.062607765197754,
+      "details": {
+        "pipeline_complete": true
+      },
+      "error": ""
+    }
+  ]
+}

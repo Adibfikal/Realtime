@@ -100,5 +100,54 @@
         "stream-fps": "30",
         "stream-height": "480",
         "stream-width": "640"
+    },
+    "enhanced_detection": {
+        "point_cloud_processing": {
+            "weighting_method": "combined",
+            "distance_weight": 0.3,
+            "validity_weight": 0.3,
+            "statistical_weight": 0.2,
+            "spatial_weight": 0.2,
+            "min_valid_points": 10,
+            "max_processing_region": 0.8,
+            "outlier_threshold": 2.0,
+            "neighborhood_window_size": 3
+        },
+        "angle_calculation": {
+            "coordinate_system": "camera_centered",
+            "angle_units": "degrees",
+            "precision": 1,
+            "enable_azimuth": true,
+            "enable_elevation": true
+        },
+        "visualization": {
+            "show_coordinates": true,
+            "show_angles": true,
+            "label_format": "detailed",
+            "coordinate_precision": 2,
+            "angle_precision": 1,
+            "compact_display": false,
+            "enable_quality_indicators": true
+        },
+        "camera_intrinsics": {
+            "auto_detect": true,
+            "fallback_fx": 525.0,
+            "fallback_fy": 525.0,
+            "fallback_cx": 320.0,
+            "fallback_cy": 240.0,
+            "update_frequency_frames": 30
+        },
+        "performance": {
+            "enable_gpu_acceleration": true,
+            "enable_half_precision": true,
+            "max_processing_time_ms": 50,
+            "enable_profiling": false
+        },
+        "quality_control": {
+            "min_point_confidence": 0.3,
+            "min_depth_quality": 0.2,
+            "enable_outlier_filtering": true,
+            "enable_consistency_check": true
+        }
     }
 }
