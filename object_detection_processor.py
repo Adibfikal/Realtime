@@ -190,15 +190,78 @@ class ObjectDetectionProcessor:
             np.abs(valid_depth - mean_depth) <= self.DEPTH_OUTLIER_THRESHOLD * std_depth
         ]
         
-        return np.mean(filtered_depth) if len(filtered_depth) > 0 else mean_depth
-    
-    def process_frame(self, rgb_frame: np.ndarray, depth_frame: np.ndarray) -> Tuple[np.ndarray, Dict]:
+        return float(np.mean(filtered_depth)) if len(filtered_depth) > 0 else float(mean_depth)
+
+    def calculate_3d_position_and_angles(self, bbox: List[float], depth_value: float, 
+                                       camera_intrinsics: dict) -> Dict:
         """
-        Process frame with object detection and depth calculation
-        Returns annotated frame and detection info
+        Calculate 3D position (x, y, z) and angles (azimuth, elevation) for detected object
+        
+        Args:
+            bbox: Bounding box coordinates [x1, y1, x2, y2]
+            depth_value: Depth in millimeters from center of bbox
+            camera_intrinsics: Camera intrinsic parameters (fx, fy, cx, cy)
+        
+        Returns:
+            Dictionary containing 3D coordinates and angles
+        """
+        if depth_value <= 0:
+            return {
+                'x': 0.0, 'y': 0.0, 'z': 0.0,
+                'azimuth': 0.0, 'elevation': 0.0,
+                'valid': False
+            }
+        
+        # Get bounding box center in pixel coordinates
+        x1, y1, x2, y2 = bbox
+        pixel_x = (x1 + x2) / 2.0
+        pixel_y = (y1 + y2) / 2.0
+        
+        # Camera intrinsic parameters (defaults for D435i)
+        fx = camera_intrinsics.get('fx', 616.4)  # focal length in x
+        fy = camera_intrinsics.get('fy', 616.8)  # focal length in y  
+        cx = camera_intrinsics.get('cx', 320.0)  # principal point x
+        cy = camera_intrinsics.get('cy', 240.0)  # principal point y
+        
+        # Convert depth from mm to meters
+        z = depth_value / 1000.0
+        
+        # Calculate 3D coordinates using pinhole camera model
+        x = (pixel_x - cx) * z / fx
+        y = (pixel_y - cy) * z / fy
+        
+        # Calculate azimuth angle (horizontal angle from center)
+        # Positive azimuth = right side, negative = left side
+        azimuth = np.arctan2(x, z) * 180.0 / np.pi
+        
+        # Calculate elevation angle (vertical angle from center)
+        # Positive elevation = above center, negative = below center
+        elevation = np.arctan2(-y, z) * 180.0 / np.pi
+        
+        return {
+            'x': float(x),           # meters, right is positive
+            'y': float(y),           # meters, down is positive (camera frame)
+            'z': float(z),           # meters, forward is positive
+            'azimuth': float(azimuth),    # degrees, right is positive
+            'elevation': float(elevation), # degrees, up is positive
+            'valid': True
+        }
+
+    def process_frame(self, rgb_frame: np.ndarray, depth_frame: np.ndarray, 
+                     camera_intrinsics: Optional[dict] = None) -> Tuple[np.ndarray, Dict]:
+        """
+        Process frame with object detection, depth calculation, and 3D positioning
+        Returns annotated frame and detection info including 3D coordinates and angles
         """
         if not self.model or not DETECTION_AVAILABLE:
             return rgb_frame, {'error': 'Model not loaded'}
+
+        if camera_intrinsics is None:
+            # Default D435i intrinsics (should be replaced with actual calibration)
+            camera_intrinsics = {
+                'fx': 616.4, 'fy': 616.8,
+                'cx': 320.0, 'cy': 240.0
+            }
         
         start_time = time.time()
         
@@ -211,7 +274,7 @@ class ObjectDetectionProcessor:
             if self.tracker:
                 detections = self.tracker.update_with_detections(detections)
             
-            # Calculate depths for each detection
+            # Calculate depths and 3D positions for each detection
             depth_values = []
             detection_info = []
             
@@ -219,6 +282,11 @@ class ObjectDetectionProcessor:
                 for i, bbox in enumerate(detections.xyxy):
                     avg_depth = self.calculate_depth_robust_center(depth_frame, bbox)
                     depth_values.append(avg_depth)
+                    
+                    # Calculate 3D position and angles
+                    position_data = self.calculate_3d_position_and_angles(
+                        bbox, avg_depth, camera_intrinsics
+                    )
                     
                     # Store detection info for metadata
                     if hasattr(detections, 'class_id') and hasattr(detections, 'tracker_id'):
@@ -234,20 +302,35 @@ class ObjectDetectionProcessor:
                             'confidence': float(confidence) if confidence is not None else None,
                             'bbox': [float(x) for x in bbox],
                             'depth_mm': float(avg_depth),
-                            'depth_m': float(avg_depth / 1000.0) if avg_depth > 0 else 0.0
+                            'depth_m': float(avg_depth / 1000.0) if avg_depth > 0 else 0.0,
+                            # 3D position and angles
+                            'position_3d': {
+                                'x': position_data['x'],
+                                'y': position_data['y'], 
+                                'z': position_data['z'],
+                                'azimuth': position_data['azimuth'],
+                                'elevation': position_data['elevation'],
+                                'valid': position_data['valid']
+                            }
                         })
             
-            # Create labels for annotation
+            # Create enhanced labels for annotation with 3D info
             labels = []
             if hasattr(detections, 'class_id') and hasattr(detections, 'tracker_id'):
                 for i, (class_id, tracker_id) in enumerate(zip(detections.class_id, detections.tracker_id)):
                     class_name = results.names[class_id] if class_id is not None and hasattr(results, 'names') else "unknown"
                     
-                    if i < len(depth_values) and depth_values[i] > 0:
+                    if i < len(detection_info) and detection_info[i]['position_3d']['valid']:
+                        pos = detection_info[i]['position_3d']
+                        # Multi-line label with 3D information
+                        label = (f"#{tracker_id} {class_name}\n"
+                                f"XYZ: ({pos['x']:.2f}, {pos['y']:.2f}, {pos['z']:.2f})m\n"
+                                f"Az: {pos['azimuth']:.1f}° El: {pos['elevation']:.1f}°")
+                    elif i < len(depth_values) and depth_values[i] > 0:
                         depth_m = depth_values[i] / 1000.0
-                        label = f"#{tracker_id} {class_name} ({depth_m:.2f}m)"
+                        label = f"#{tracker_id} {class_name}\nDepth: {depth_m:.2f}m"
                     else:
-                        label = f"#{tracker_id} {class_name} (No depth)"
+                        label = f"#{tracker_id} {class_name}\nNo depth data"
                     
                     labels.append(label)
             

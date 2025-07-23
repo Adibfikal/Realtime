@@ -15,6 +15,7 @@ from config_loader import ConfigLoader
 from camera_controller import CameraController
 from dependency_manager import DependencyManager
 from model_manager import ModelManager
+from live_3d_visualizer import Live3DVisualizer, CompactPositionDisplay
 
 class VideoDisplayWidget(QLabel):
     """Custom widget for displaying video frames"""
@@ -93,6 +94,10 @@ class MainWindow(QMainWindow):
         # Initialize detection managers
         self.dependency_manager = DependencyManager()
         self.model_manager = ModelManager()
+        
+        # Initialize 3D visualizer
+        self.live_3d_visualizer = None
+        self.compact_3d_display = CompactPositionDisplay()
         
         # UI state
         self.is_camera_connected = False
@@ -177,7 +182,11 @@ class MainWindow(QMainWindow):
         
         # Left panel - Video displays
         video_panel = self.create_video_panel()
-        main_layout.addWidget(video_panel, stretch=3)
+        main_layout.addWidget(video_panel, stretch=2)
+        
+        # Middle panel - 3D Position Display
+        position_panel = self.create_position_panel()
+        main_layout.addWidget(position_panel, stretch=1)
         
         # Right panel - Controls
         control_panel = self.create_control_panel()
@@ -227,6 +236,50 @@ class MainWindow(QMainWindow):
         self.detection_stats_label.setAlignment(Qt.AlignCenter)
         self.detection_stats_label.setStyleSheet("background-color: #2a4a2a; color: white; padding: 5px;")
         layout.addWidget(self.detection_stats_label)
+        
+        return panel
+    
+    def create_position_panel(self):
+        """Create the 3D position display panel"""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        
+        # Title
+        title = QLabel("3D Object Positions")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 14px; font-weight: bold; margin: 5px; color: #ffffff;")
+        layout.addWidget(title)
+        
+        # Add the compact 3D display
+        layout.addWidget(self.compact_3d_display)
+        
+        # Button to open full 3D visualizer
+        self.full_visualizer_btn = QPushButton("Open Full 3D Visualizer")
+        self.full_visualizer_btn.clicked.connect(self.open_full_3d_visualizer)
+        self.full_visualizer_btn.setMinimumHeight(35)
+        layout.addWidget(self.full_visualizer_btn)
+        
+        # Current object info
+        current_info_group = QGroupBox("Current Frame Info")
+        current_info_layout = QVBoxLayout(current_info_group)
+        
+        self.current_objects_label = QLabel("Objects in frame: 0")
+        self.current_objects_label.setStyleSheet("color: #ffffff; font-weight: bold;")
+        current_info_layout.addWidget(self.current_objects_label)
+        
+        self.closest_object_label = QLabel("Closest object: N/A")
+        self.closest_object_label.setStyleSheet("color: #ffffff;")
+        current_info_layout.addWidget(self.closest_object_label)
+        
+        self.spatial_distribution_label = QLabel("Spatial distribution: N/A")
+        self.spatial_distribution_label.setStyleSheet("color: #ffffff; font-size: 10px;")
+        self.spatial_distribution_label.setWordWrap(True)
+        current_info_layout.addWidget(self.spatial_distribution_label)
+        
+        layout.addWidget(current_info_group)
+        
+        # Add stretch to push content to top
+        layout.addStretch()
         
         return panel
     
@@ -478,6 +531,15 @@ Format: {stream_config['depth_format']}
         if folder:
             self.save_path_label.setText(f"Save to: {folder}/")
     
+    def open_full_3d_visualizer(self):
+        """Open the full 3D visualizer window"""
+        if self.live_3d_visualizer is None:
+            self.live_3d_visualizer = Live3DVisualizer()
+        
+        self.live_3d_visualizer.show()
+        self.live_3d_visualizer.raise_()
+        self.live_3d_visualizer.activateWindow()
+    
     def update_ui(self):
         """Update UI with latest frames and status"""
         if not self.camera_controller.is_streaming:
@@ -494,6 +556,14 @@ Format: {stream_config['depth_format']}
                 self.depth_display.update_frame(frames['annotated'])
             else:
                 self.depth_display.update_frame(frames['depth_colorized'])
+            
+            # Update 3D position displays
+            self.compact_3d_display.update_detection_data(frames)
+            if self.live_3d_visualizer:
+                self.live_3d_visualizer.update_detection_data(frames)
+            
+            # Update position panel info
+            self._update_position_panel_info(frames)
             
             # Update frame counter
             self.frame_count += 1
@@ -521,6 +591,62 @@ Format: {stream_config['depth_format']}
                 else:
                     self.detection_stats_label.setText("Detection: Disabled | Objects: 0 | Processing: 0ms")
                     self.detection_stats_label.setStyleSheet("background-color: #4a2a2a; color: white; padding: 5px;")  # Red background
+    
+    def _update_position_panel_info(self, frame_data):
+        """Update the position panel with current frame information"""
+        if not frame_data or 'detection_metadata' not in frame_data:
+            self.current_objects_label.setText("Objects in frame: 0")
+            self.closest_object_label.setText("Closest object: N/A")
+            self.spatial_distribution_label.setText("Spatial distribution: N/A")
+            return
+        
+        detection_metadata = frame_data['detection_metadata']
+        if not detection_metadata or 'detections' not in detection_metadata:
+            self.current_objects_label.setText("Objects in frame: 0")
+            self.closest_object_label.setText("Closest object: N/A")
+            self.spatial_distribution_label.setText("Spatial distribution: N/A")
+            return
+        
+        detections = detection_metadata['detections']
+        valid_positions = []
+        
+        # Collect valid 3D positions
+        for detection in detections:
+            pos_3d = detection.get('position_3d', {})
+            if pos_3d.get('valid', False):
+                valid_positions.append({
+                    'name': detection.get('class_name', 'Unknown'),
+                    'id': detection.get('tracker_id', 'N/A'),
+                    'distance': pos_3d['z'],
+                    'azimuth': pos_3d['azimuth'],
+                    'elevation': pos_3d['elevation']
+                })
+        
+        # Update object count
+        total_objects = len(detections)
+        valid_count = len(valid_positions)
+        self.current_objects_label.setText(f"Objects in frame: {total_objects} ({valid_count} with 3D data)")
+        
+        # Find and display closest object
+        if valid_positions:
+            closest = min(valid_positions, key=lambda x: x['distance'])
+            self.closest_object_label.setText(
+                f"Closest: {closest['name']} (ID: {closest['id']}) at {closest['distance']:.2f}m"
+            )
+            
+            # Calculate spatial distribution
+            left_count = sum(1 for pos in valid_positions if pos['azimuth'] < -10)
+            center_count = sum(1 for pos in valid_positions if -10 <= pos['azimuth'] <= 10)
+            right_count = sum(1 for pos in valid_positions if pos['azimuth'] > 10)
+            
+            self.spatial_distribution_label.setText(
+                f"Left: {left_count} | Center: {center_count} | Right: {right_count}\n"
+                f"Distance range: {min(pos['distance'] for pos in valid_positions):.2f}m - "
+                f"{max(pos['distance'] for pos in valid_positions):.2f}m"
+            )
+        else:
+            self.closest_object_label.setText("Closest object: N/A (no valid 3D data)")
+            self.spatial_distribution_label.setText("Spatial distribution: N/A")
     
     def closeEvent(self, event):
         """Handle application close"""

@@ -41,6 +41,14 @@ class CameraController:
         self.stream_config = config_loader.get_stream_config()
         self.camera_params = config_loader.get_camera_parameters()
         
+        # Camera intrinsic parameters (will be set from actual camera)
+        self.camera_intrinsics = {
+            'fx': 616.4,  # Default for D435i, will be updated
+            'fy': 616.8,
+            'cx': 320.0,
+            'cy': 240.0
+        }
+        
     def set_callbacks(self, rgb_callback: Callable, depth_callback: Callable):
         """Set callbacks for frame updates"""
         self.rgb_callback = rgb_callback
@@ -61,6 +69,10 @@ class CameraController:
     def get_detection_stats(self) -> dict:
         """Get current detection statistics"""
         return self.detection_processor.get_statistics()
+    
+    def get_camera_intrinsics(self) -> dict:
+        """Get current camera intrinsic parameters"""
+        return self.camera_intrinsics.copy()
     
     def connect(self) -> bool:
         """Connect to RealSense camera and start streaming"""
@@ -91,6 +103,9 @@ class CameraController:
             
             # Apply camera parameters
             self._apply_camera_settings(profile)
+            
+            # Get actual camera intrinsics
+            self._update_camera_intrinsics(profile)
             
             print("✓ RealSense camera connected successfully")
             return True
@@ -153,6 +168,27 @@ class CameraController:
             
         except Exception as e:
             print(f"⚠ Warning: Could not apply some camera settings: {e}")
+
+    def _update_camera_intrinsics(self, profile):
+        """Update camera intrinsics from actual camera calibration"""
+        try:
+            # Get color stream profile
+            color_stream = profile.get_stream(rs.stream.color)
+            color_intrinsics = color_stream.as_video_stream_profile().get_intrinsics()
+            
+            self.camera_intrinsics.update({
+                'fx': color_intrinsics.fx,
+                'fy': color_intrinsics.fy,
+                'cx': color_intrinsics.ppx,
+                'cy': color_intrinsics.ppy,
+                'width': color_intrinsics.width,
+                'height': color_intrinsics.height
+            })
+            
+            print(f"✓ Camera intrinsics updated: fx={color_intrinsics.fx:.1f}, fy={color_intrinsics.fy:.1f}")
+            
+        except Exception as e:
+            print(f"⚠ Warning: Could not get camera intrinsics, using defaults: {e}")
     
     def start_streaming(self) -> bool:
         """Start camera streaming in separate thread"""
@@ -212,7 +248,9 @@ class CameraController:
                     try:
                         # Convert BGR to RGB for YOLO processing
                         rgb_frame = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
-                        annotated_frame, detection_metadata = self.detection_processor.process_frame(rgb_frame, depth_image)
+                        annotated_frame, detection_metadata = self.detection_processor.process_frame(
+                            rgb_frame, depth_image, self.camera_intrinsics
+                        )
                         # Convert back to BGR for display
                         annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_RGB2BGR)
                     except Exception as e:
