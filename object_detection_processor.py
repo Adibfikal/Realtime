@@ -144,7 +144,7 @@ class ObjectDetectionProcessor:
                 text_scale=self.LABEL_FONT_SCALE,
                 text_thickness=self.LABEL_FONT_THICKNESS,
                 text_padding=self.LABEL_PADDING,
-                text_color=sv.Color.white()
+                text_color=sv.Color.WHITE
             )
             
             self.detection_stats['model_loaded'] = True
