@@ -290,8 +290,11 @@ class CompactPositionDisplay(QWidget):
     def update_detection_data(self, frame_data: Dict):
         """Update with latest detection data"""
         # Clear existing widgets
-        for i in reversed(range(self.content_layout.count())):
-            self.content_layout.itemAt(i).widget().setParent(None)
+        while self.content_layout.count():
+            item = self.content_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
         
         if not frame_data or 'detection_metadata' not in frame_data:
             self.status_label.setText("No detection data")
